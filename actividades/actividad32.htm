@@ -4,12 +4,12 @@
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 
 <meta name="dc:creator" content="cdgos" />
-<meta name="dc:title" content="ESTRUCTURA B&#x00C1;SICA DE LOS PROGRAMAS EDUCATIVOS" />
+<meta name="dc:title" content="Conceptualizaci&#x00F3;n de los Objetos Virtuales de Aprendizaje" />
 
 
 
 <title>
-ESTRUCTURA B&#x00C1;SICA DE LOS PROGRAMAS EDUCATIVOS
+Conceptualizaci&#x00F3;n de los Objetos Virtuales de Aprendizaje
 </title>
 
 <!-- Made with executable version 7.0 Release 3 Build 0 -->
@@ -963,554 +963,577 @@ function ClearTextBoxes(){
 
 
 
-//Polyfill for old Safari versions.
-if (window.NodeList && !NodeList.prototype.forEach) {
-    NodeList.prototype.forEach = Array.prototype.forEach;
-}
 
 
+//JQUIZ CORE JAVASCRIPT CODE
 
-//JMATCH-SPECIFIC CORE JAVASCRIPT CODE
-
-//Work around Safari bug
-var scrollable = true;
-
-var listener = function(e) {
-    if (! scrollable) {
-        e.preventDefault();
-    }
-}
-
-document.addEventListener('touchmove', listener, { passive:false });
-
-var CorrectResponse = 'Correcto! Bien hecho';
-var IncorrectResponse = 'Incorrecto! Intenta de nuevo';
+var CurrQNum = 0;
+var CorrectIndicator = '&#x2714;';
+var IncorrectIndicator = '&#x2718;';
 var YourScoreIs = 'Su puntuaci&#x00F3;n es';
-var FeedbackWidth = 200; //default
-var ExBGColor = getComputedStyle(document.documentElement).getPropertyValue('--strExBGColor');
-var PageBGColor = getComputedStyle(document.documentElement).getPropertyValue('--strPageBGColor');
-var TextColor = getComputedStyle(document.documentElement).getPropertyValue('--strTextColor');
-var TitleColor = getComputedStyle(document.documentElement).getPropertyValue('--strTitleColor');
-var Penalties = 0;
-var Score = 0;
-var TimeOver = false;
-var Locked = false;
+
+//New for 6.2.2.0
+var CompletedSoFar = 'Preguntas completadas hasta ahora:';
+var ExerciseCompleted = 'Actividad completada';
+var ShowCompletedSoFar = true;
+
+var ContinuousScoring = true;
+var CorrectFirstTime = 'Preguntas respondidas correctamente la primera vez:';
+var ShowCorrectFirstTime = true;
 var ShuffleQs = false;
-var QsToShow = 0;
-var ResizeTimer = null;
-
-var LeftColPos = 100;
-var RightColPos = 500;
-var DragTop = 120;
+var ShuffleAs = false;
+var DefaultRight = 'Correcto!';
+var DefaultWrong = 'Incorrecto!, Intenta de nuevo';
+var QsToShow = 2;
+var Score = 0;
 var Finished = false;
-var AnswersTried = '';
+var Qs = null;
+var QArray = new Array();
+var ShowingAllQuestions = false;
+var ShowAllQuestionsCaption = 'Mostrar todas las preguntas';
+var ShowOneByOneCaption = 'Mostrar preguntas de una en una';
+var State = new Array();
+var Feedback = '';
+var TimeOver = false;
+var strInstructions = '';
+var Locked = false;
 
-//Fixed and draggable card arrays
-FC = new Array();
-DC = new Array();
+//The following variable can be used to add a message explaining that
+//the question is finished, so no further marking will take place.
+var strQuestionFinished = '';
 
-var DraggingCard = null;
-var moveFunc = function(e){e.preventDefault(); doDrag(e)};
-var endFunc = function(e){e.preventDefault(); endDrag(e)};
-
-function beginDrag(e, Card){
-	scrollable = false;
-	DraggingCard = Card;
-	DraggingCard.Highlight();
-	window.addEventListener('mousemove',  moveFunc);
-	window.addEventListener('mouseup',    endFunc);
-	window.addEventListener('touchmove',  moveFunc);
-	window.addEventListener('touchend',   endFunc);
-	var currX, currY;
-	if (e.touches){
-		currX = e.touches[0].clientX;
-		currY = e.touches[0].clientY;
+function CompleteEmptyFeedback(){
+	var QNum, ANum;
+	for (QNum=0; QNum<I.length; QNum++){
+//Only do this if not multi-select
+		if (I[QNum][2] != '3'){
+  		for (ANum = 0; ANum<I[QNum][3].length; ANum++){
+  			if (I[QNum][3][ANum][1].length < 1){
+  				if (I[QNum][3][ANum][2] > 0){
+  					I[QNum][3][ANum][1] = DefaultRight;
+  				}
+  				else{
+  					I[QNum][3][ANum][1] = DefaultWrong;
+  				}
+  			}
+  		}
+		}
 	}
-	else{
-		currX = e.clientX;
-		currY = e.clientY; 
+}
+
+function SetUpQuestions(){
+	var AList = new Array(); 
+	var QList = new Array();
+	var i, j;
+	Qs = document.getElementById('Questions');
+	while (Qs.getElementsByTagName('li').length > 0){
+		QList.push(Qs.removeChild(Qs.getElementsByTagName('li')[0]));
 	}
-
-	topZ++;
-	DraggingCard.style.zIndex = topZ;
-	window.lastX = currX; 
-	window.lastY = currY;
-	return false;  
-} 
-
-
-function doDrag(e) {
-	var currX, currY;
-	var difX, difY;
-	if (e.touches){
-		currX = e.touches[0].clientX;
-		currY = e.touches[0].clientY;
+	var DumpItem = 0;
+	if (QsToShow > QList.length){
+		QsToShow = QList.length;
 	}
-	else{
-		currX = e.clientX;
-		currY = e.clientY; 
+	while (QsToShow < QList.length){
+		DumpItem = Math.floor(QList.length*Math.random());
+		for (j=DumpItem; j<(QList.length-1); j++){
+			QList[j] = QList[j+1];
+		}
+		QList.length = QList.length-1;
 	}
-	
-	difX = currX - window.lastX; 
-	difY = currY - window.lastY;
-	DraggingCard.style.left = DraggingCard.GetL() + difX + 'px'; 
-	DraggingCard.style.top  = DraggingCard.GetT() + difY + 'px'; 
-	window.lastX = currX; 
-	window.lastY = currY; 
-	return false;
-} 
-
-function endDrag(e) { 
-	DraggingCard.Unhighlight();
-	window.removeEventListener('mousemove', moveFunc);
-	window.removeEventListener('touchmove', moveFunc);
-	window.removeEventListener('mouseup', endFunc);
-	window.removeEventListener('touchend', endFunc);
-	onEndDrag();
-	scrollable = true;
-	return true;
-} 
-
-function onEndDrag(){ 
-	DraggingOrigPos = parseInt(DraggingCard.getAttribute('id').substring(2));
-	DragEx.HandleDrop(DraggingOrigPos);
-	DraggingCard = null;
-} 
-
-//Utility functions for dimensions of elements.
-var GetL = function(){
-	return this.offsetLeft;
-}
-var GetR = function(){
-	return this.offsetLeft + this.offsetWidth;
-}
-var GetT = function(){
-	return this.offsetTop;
-}
-var GetB = function(){
-	return this.offsetTop + this.offsetHeight;
-}
-var GetH = function(){
-	return this.offsetHeight;
-}
-var GetW = function(){
-	return this.offsetWidth;
-}
-var Highlight = function(){
-	this.style.backgroundColor = TextColor;
-	this.style.color = ExBGColor;
-};
-var Unhighlight = function(){
-	this.style.backgroundColor = ExBGColor;
-	this.style.color = TextColor;
-};
-var GetOverlap = function(OtherCard){
-	var smR=(this.GetR() < OtherCard.GetR())? this.GetR(): OtherCard.GetR();
-	var lgL=(this.GetL() > OtherCard.GetL())? this.GetL(): OtherCard.GetL();
-	var HDim=smR-lgL;
-	if (HDim<1){return 0;}
-	var smB=(this.GetB() < OtherCard.GetB())? this.GetB(): OtherCard.GetB();
-	var lgT=(this.GetT() > OtherCard.GetT())? this.GetT(): OtherCard.GetT();
-	var VDim=smB-lgT;
-	if (VDim<1){return 0;}
-	return (HDim*VDim);	
-};
-
-/*
-  The new V7 DragEx object replaces the arrays of old.
-*/
-var V7JsonEx = '{  "ShuffleLeftItems": false,  "IsSimple": false,  "ItemsToShow": -1,  "LeftItems": [{"OrigPos": 0,     "Group": 0}, {"OrigPos": 1,     "Group": 1}, {"OrigPos": 2,     "Group": 2}],  "RightItems": [{"OrigPos": 0,     "Groups": [0], "MatchedWith": -1}, {"OrigPos": 1,     "Groups": [1], "MatchedWith": -1}, {"OrigPos": 2,     "Groups": [2], "MatchedWith": -1}]}';
-
-var DragEx = JSON.parse(V7JsonEx);
-
-//Methods for the object.
-DragEx.Setup = function(){
-	var i;
-	
-
-
-
-
-
-
-//Add custom functions to all the cards.
-	document.querySelectorAll('div.CardStyle').forEach(function(div){
-		div.Highlight = Highlight.bind(div);
-		div.Unhighlight = Unhighlight.bind(div);
-		div.GetL = GetL.bind(div);
-		div.GetT = GetT.bind(div);
-		div.GetR = GetR.bind(div);
-		div.GetB = GetB.bind(div);
-		div.GetH = GetH.bind(div);
-		div.GetW = GetW.bind(div);
-		div.GetOverlap = GetOverlap.bind(div);
-	}.bind(this));
-	
-//Connect each of the items to its card.
-	this.LeftItems.forEach(function(LI){
-		LI.Card = document.getElementById('L_' + LI.OrigPos);
-	}.bind(this));
-	this.RightItems.forEach(function(RI){
-		RI.Card = document.getElementById('R_' + RI.OrigPos);
-		RI.Card.addEventListener('mousedown',  (function(e){beginDrag(e, this)}.bind(RI.Card)));
-		RI.Card.addEventListener('touchstart', (function(e){beginDrag(e, this)}.bind(RI.Card)));
-		RI.Card.style.cursor = 'grab';
-	}.bind(this));
-//Reduce the items as required. Sanity check: don't allow less than 2.
-	if (this.ItemsToShow > 2){
-		while (this.LeftItems.length > this.ItemsToShow){
-			RemItem = Math.floor(this.LeftItems.length*Math.random());
-			OP = this.LeftItems[RemItem].OrigPos;
-			this.LeftItems[RemItem].Card.parentNode.removeChild(this.LeftItems[RemItem].Card);
-			this.LeftItems.splice([RemItem], 1);
-
-//Having removed an item from the left, we must remove the corresponding 
-//one from the right if it exists. (There may not be a matching item if 
-//the one removed was a distractor.)
-			for (i = 0; i < this.RightItems.length; i++){
-				if (this.RightItems[i].OrigPos == OP){
-					this.RightItems[i].Card.parentNode.removeChild(this.RightItems[i].Card);
-					this.RightItems.splice(i, 1);
+	if (ShuffleQs == true){
+		QList = Shuffle(QList);
+	}
+	if (ShuffleAs == true){
+		var As;
+		for (var i=0; i<QList.length; i++){
+			As = QList[i].getElementsByTagName('ol')[0];
+			if (As != null){
+  			AList.length = 0;
+				while (As.getElementsByTagName('li').length > 0){
+					AList.push(As.removeChild(As.getElementsByTagName('li')[0]));
+				}
+				AList = Shuffle(AList);
+				for (j=0; j<AList.length; j++){
+					As.appendChild(AList[j]);
 				}
 			}
 		}
 	}
-//Now do any shuffling that's required.
-	if (this.ShuffleLeftItems == true){
-		this.LeftItems = Shuffle(this.LeftItems);
-	}
-	this.RightItems = Shuffle(this.RightItems);
 	
-	this.SetInitialPositions(true);
-	
-//Fix to avoid image dragging problem in cards with images.
-	var DragImgs = document.querySelectorAll('div.CardStyle img');
-	for (i = 0; i<DragImgs.length; i++){
-		DragImgs[i]. onmousedown = function(){return false;}
+	for (i=0; i<QList.length; i++){
+		Qs.appendChild(QList[i]);
+		QArray[QArray.length] = QList[i];
 	}
 
-//We use a timeout here to allow card positions to be established
-//before they're used for sliding matched cards.
-	window.addEventListener('resize', function(e){
-		clearTimeout(ResizeTimer);
-		ResizeTimer = setTimeout(function(){DragEx.SetInitialPositions(false)}, 250);
-	});
-
+//Show the first item
+	QArray[0].style.display = '';
 	
+//Now hide all except the first item
+	for (i=1; i<QArray.length; i++){
+		QArray[i].style.display = 'none';
+	}		
+	SetQNumReadout();
+	
+	SetFocusToTextbox();
+}
 
-};
-
-DragEx.GetLeftItemByOrigPos = function(Pos){
-	for (var i=0; i<this.LeftItems.length; i++){
-		if (this.LeftItems[i].OrigPos === Pos){
-			return this.LeftItems[i];
+function SetFocusToTextbox(){
+//if there's a textbox, set the focus in it
+	if (QArray[CurrQNum].getElementsByTagName('input')[0] != null){
+		QArray[CurrQNum].getElementsByTagName('input')[0].focus();
+//and show a keypad if there is one
+		if (document.getElementById('CharacterKeypad') != null){
+			document.getElementById('CharacterKeypad').style.display = 'block';
 		}
 	}
-	return null;
-};
-
-DragEx.GetRightItemByOrigPos = function(Pos){
-	for (var i=0; i<this.RightItems.length; i++){
-		if (this.RightItems[i].OrigPos === Pos){
-			return this.RightItems[i];
-		}
-	}
-	return null;
-};
-
-DragEx.SendHome = function(ROrigPos){
-	Slide(ROrigPos, this.GetRightItemByOrigPos(ROrigPos).Home);
-};
-
-DragEx.SetInitialPositions = function(slide){
-	
-	var ExDiv = document.querySelector('div.ExerciseContainer');
-	
-//Get the default font size.
-	var FontSize = Math.round(parseFloat(getComputedStyle(ExDiv).fontSize));
-	
-//Get the value of any drop-shadow on the cards so we can allow for it in layout.
-	var DS =  window.getComputedStyle(this.LeftItems[0].Card).getPropertyValue('box-shadow').split('px ');
-	var DSOffset = 5;
-	if ((DS.length > 1)&&(!(Number.isNaN(parseFloat(DS[1]))))){
-		DSOffset += Math.abs(Math.ceil(parseFloat(DS[1])));
-	}
-	
-//Calculate container dimensions and positions
-	DragTop = parseInt(document.getElementById('CheckButtonDiv').offsetHeight) + parseInt(document.getElementById('CheckButtonDiv').offsetTop) + DSOffset;
-	
-	var ExDivLeft = ExDiv.offsetLeft;
-	var ExDivWidth = ExDiv.offsetWidth;	
-	var Indent = Math.min(Math.floor(ExDivWidth / 20), FontSize);
-	var DragWidth = Math.floor(ExDivWidth / 4);
-	LeftColPos = ExDivLeft + Indent;
-
-//Calculate the width for the left items.	
-	var WidestLeft = 0;
-	for (var i=0; i<this.LeftItems.length; i++){
-		var CurrCard = this.LeftItems[i].Card;
-		CurrCard.style.width = '';
-		CurrCard.style.height = '';
-		var w = CurrCard.GetW() + 10;
-		if (w > WidestLeft){
-			WidestLeft = w;
-		}
-	}
-	if (WidestLeft > DragWidth){WidestLeft = DragWidth;}
-
-//Calculate the width for the right items.
-	DragWidth = Math.floor((ExDivWidth-WidestLeft)/2) - 24;
-	RightColPos = ExDivWidth + LeftColPos - (DragWidth + 14 + Indent);
-	var Highest = 0;
-	var WidestRight = 0;
-
-	for (i=0; i<this.RightItems.length; i++){
-		var CurrCard = this.RightItems[i].Card;
-		CurrCard.style.width = '';
-		CurrCard.style.height = '';
-		if (CurrCard.GetW() > DragWidth){CurrCard.style.width = DragWidth + 'px';}
-		if (CurrCard.GetH() > Highest){Highest = CurrCard.GetH();}
-		if (CurrCard.GetW() > WidestRight){WidestRight = CurrCard.GetW();}
-	}
-
-//Size and position the right items.		
-	var CurrTop = DragTop;
-	
-	for (i=0; i<this.RightItems.length; i++){
-		var CurrCard = this.RightItems[i].Card;
-		CurrCard.style.top = CurrTop + 'px';
-		CurrCard.style.left = RightColPos + 'px';
-		CurrCard.style.height = Highest + 'px';
-		CurrCard.style.width = (WidestRight + 10) + 'px';
-		this.RightItems[i].Home = [RightColPos, CurrTop];
-		CurrTop = CurrTop + CurrCard.GetH() + DSOffset;
-	}
-
-//Size and position the left items.
-	CurrTop = DragTop;
-
-	for (var i=0; i<this.LeftItems.length; i++){
-		var CurrCard = this.LeftItems[i].Card;
-		CurrCard.style.width = WidestLeft + 'px';
-		if (CurrCard.GetH() < Highest){CurrCard.style.height = Highest + 'px';}
-		CurrCard.style.top = CurrTop + 'px';
-		CurrCard.style.left = LeftColPos + 'px';
-		CurrTop = CurrTop + CurrCard.GetH() + DSOffset;
-	}
-
-//Now we clone the top navbar to create a bottom	
-//navbar, and position it.
-	var TopNav = document.getElementById('TopNavBar');
-	var ReadingDiv = document.getElementById('ReadingDiv');
-	
-	if (TopNav !== null){
-
-//First delete one if there is one.
-		var BottomNav = document.getElementById('BottomNavBar');
-		if (BottomNav === null){
-			BottomNav = document.getElementById('TopNavBar').cloneNode(true);
-			BottomNav.setAttribute('id', 'BottomNavBar');
-			BottomNav.style.position = 'absolute';
-			document.body.appendChild(BottomNav);
-		}
-		var LowestLeft = this.LeftItems[this.LeftItems.length - 1].Card.GetB();
-		var LowestRight = this.RightItems[this.RightItems.length - 1].Card.GetB();
-		var ReadingBottom = (ReadingDiv)? ReadingDiv.offsetTop + ReadingDiv.offsetHeight : 0;
-		BottomNav.style.top = (Math.max(ReadingBottom, LowestLeft, LowestRight) + FontSize) + 'px' ;
-		BottomNav.style.width = document.getElementById('TopNavBar').offsetWidth + 'px';
-	}
-	
-//Now slide any already-matched items into position.
-	this.RightItems.forEach(function(RI){
-		if (RI.MatchedWith > -1){
-			var TargPoint = this.GetDockPoint(RI.MatchedWith, RI.Card);
-			if (RI.MarkedWrong == true){
-				RI.Card.Highlight();
-				TargPoint[0] = TargPoint[0] + 10;
+	else{
+  	if (QArray[CurrQNum].getElementsByTagName('textarea')[0] != null){
+  		QArray[CurrQNum].getElementsByTagName('textarea')[0].focus();	
+//and show a keypad if there is one
+			if (document.getElementById('CharacterKeypad') != null){
+				document.getElementById('CharacterKeypad').style.display = 'block';
 			}
-			if (slide == true){
-				Slide(RI.OrigPos, TargPoint);
+		}
+//This added for 6.0.4.11: hide accented character buttons if no textbox
+		else{
+			if (document.getElementById('CharacterKeypad') != null){
+				document.getElementById('CharacterKeypad').style.display = 'none';
+			}
+		}
+	}
+}
+
+function ChangeQ(ChangeBy){
+//The following line prevents moving to another question until the current
+//question is answered correctly. Uncomment it to enable this behaviour. 
+//	if (State[CurrQNum][0] == -1){return;}
+	if (((CurrQNum + ChangeBy) < 0)||((CurrQNum + ChangeBy) >= QArray.length)){return;}
+	QArray[CurrQNum].style.display = 'none';
+	CurrQNum += ChangeBy;
+	QArray[CurrQNum].style.display = '';
+//Undocumented function added 10/12/2004
+	ShowSpecialReadingForQuestion();
+	SetQNumReadout();
+	SetFocusToTextbox();
+}
+
+var HiddenReadingShown = false;
+function ShowSpecialReadingForQuestion(){
+//Undocumented function for showing specific reading text elements which change with each question
+//Added on 10/12/2004
+	if (document.getElementById('ReadingDiv') != null){
+		if (HiddenReadingShown == true){
+			document.getElementById('ReadingDiv').innerHTML = '';
+		}
+		if (QArray[CurrQNum] != null){
+//Fix for 6.0.4.25
+			var Children = QArray[CurrQNum].getElementsByTagName('div');
+			for (var i=0; i<Children.length; i++){
+			if (Children[i].className=="HiddenReading"){
+					document.getElementById('ReadingDiv').innerHTML = Children[i].innerHTML;
+					HiddenReadingShown = true;
+//Hide the ShowAllQuestions button to avoid confusion
+					if (document.getElementById('ShowMethodButton') != null){
+						document.getElementById('ShowMethodButton').style.display = 'none';
+					}
+				}
+			}	
+		}
+	}
+}
+
+function SetQNumReadout(){
+	document.getElementById('QNumReadout').innerHTML = (CurrQNum+1) + ' / ' + QArray.length;
+	if ((CurrQNum+1) >= QArray.length){
+		if (document.getElementById('NextQButton') != null){
+			document.getElementById('NextQButton').style.visibility = 'hidden';
+		}
+	}
+	else{
+		if (document.getElementById('NextQButton') != null){
+			document.getElementById('NextQButton').style.visibility = 'visible';
+		}
+	}
+	if (CurrQNum <= 0){
+		if (document.getElementById('PrevQButton') != null){
+			document.getElementById('PrevQButton').style.visibility = 'hidden';
+		}
+	}
+	else{
+		if (document.getElementById('PrevQButton') != null){
+			document.getElementById('PrevQButton').style.visibility = 'visible';
+		}
+	}
+}
+
+var I=new Array();
+I[0]=new Array();I[0][0]=100;
+I[0][1]='';
+I[0][2]='0';
+I[0][3]=new Array();
+I[0][3][0]=new Array('Programas lineales y no lineales.','',0,0,1);
+I[0][3][1]=new Array('Herramienta de c\u00F3digo abierto que facilita la creaci\u00F3n de contenidos educativos.','',0,0,1);
+I[0][3][2]=new Array('Software consistente de un conjunto de funcionalidades para gestionar contenidos de aprendizaje.','',1,100,1);
+I[0][3][3]=new Array('Pr\u00E1cticas, tutoriales, simulaciones, juegos instruccionales.','',0,0,1);
+I[1]=new Array();I[1][0]=100;
+I[1][1]='';
+I[1][2]='0';
+I[1][3]=new Array();
+I[1][3][0]=new Array('Desplegables, mantenibilidad operabilidad.','',1,100,1);
+I[1][3][1]=new Array('Educar, inspeccionar, fomentar.','',0,0,1);
+I[1][3][2]=new Array('Interactividad, flexibilidad, escalabilidad.','',0,0,1);
+I[1][3][3]=new Array('Todas las anteriores.','',0,0,1);
+
+
+function StartUp(){
+
+//If there's only one question, no need for question navigation controls
+	if (QsToShow < 2){
+		document.getElementById('QNav').style.display = 'none';
+	}
+	
+//Stash the instructions so they can be redisplayed
+	strInstructions = document.getElementById('InstructionsDiv').innerHTML;
+	
+
+	
+
+	
+
+	
+	CompleteEmptyFeedback();
+
+	SetUpQuestions();
+	ClearTextBoxes();
+	CreateStatusArray();
+	
+
+	
+//Check search string for q parameter
+	if (document.location.search.length > 0){
+		if (ShuffleQs == false){
+			var JumpTo = parseInt(document.location.search.substring(1,document.location.search.length))-1;
+			if (JumpTo <= QsToShow){
+				ChangeQ(JumpTo);
+			}
+		}
+	}
+//Undocumented function added 10/12/2004
+	ShowSpecialReadingForQuestion();
+}
+
+function ShowHideQuestions(){
+	document.getElementById('ShowMethodButton').style.display = 'none';
+	if (ShowingAllQuestions == false){
+		for (var i=0; i<QArray.length; i++){
+				QArray[i].style.display = '';
+			}
+		document.getElementById('Questions').style.listStyleType = 'decimal';
+		document.getElementById('OneByOneReadout').style.display = 'none';
+		document.getElementById('ShowMethodButton').innerHTML = ShowOneByOneCaption;
+		ShowingAllQuestions = true;
+	}
+	else{
+		for (var i=0; i<QArray.length; i++){
+				if (i != CurrQNum){
+					QArray[i].style.display = 'none';
+				}
+			}
+		document.getElementById('Questions').style.listStyleType = 'none';
+		document.getElementById('OneByOneReadout').style.display = '';
+		document.getElementById('ShowMethodButton').innerHTML = ShowAllQuestionsCaption;
+		ShowingAllQuestions = false;	
+	}
+	document.getElementById('ShowMethodButton').style.display = 'inline';
+}
+
+function CreateStatusArray(){
+	var QNum, ANum;
+//For each item in the item array
+	for (QNum=0; QNum<I.length; QNum++){
+//Check if the question still exists (hasn't been nuked by showing a random selection)
+		if (document.getElementById('Q_' + QNum) != null){
+			State[QNum] = new Array();
+			State[QNum][0] = -1; //Score for this q; -1 shows question not done yet
+			State[QNum][1] = new Array(); //answers
+			for (ANum = 0; ANum<I[QNum][3].length; ANum++){
+				State[QNum][1][ANum] = 0; //answer not chosen yet; when chosen, will store its position in the series of choices
+			}
+			State[QNum][2] = 0; //tries at this q so far
+			State[QNum][3] = 0; //incrementing percent-correct values of selected answers
+			State[QNum][4] = 0; //penalties incurred for hints
+			State[QNum][5] = ''; //Sequence of answers chosen by number
+		}
+		else{
+			State[QNum] = null;
+		}
+	}
+}
+
+
+
+function CheckMCAnswer(QNum, ANum, Btn){
+//if question doesn't exist, bail
+	if (State[QNum].length < 1){return;}
+	
+//Get the feedback
+	Feedback = I[QNum][3][ANum][1];
+	
+//Now show feedback and bail if question already complete
+	if (State[QNum][0] > -1){
+//Add an extra message explaining that the question
+// is finished if defined by the user
+		if (strQuestionFinished.length > 0){Feedback += '<br />' + strQuestionFinished;}
+//Show the feedback
+		ShowMessage(Feedback);
+//New for 6.2.2.1: If you want to mark an answer as correct even when it's the final choice, uncomment this line.
+//		if (I[QNum][3][ANum][2] >= 1){Btn.innerHTML = CorrectIndicator;}else{Btn.innerHTML = IncorrectIndicator;}	
+		return;
+	}
+	
+//Hide the button while processing
+	Btn.style.display = 'none';
+
+//Increment the number of tries
+	State[QNum][2]++;
+	
+//Add the percent-correct value of this answer
+	State[QNum][3] += I[QNum][3][ANum][3];
+	
+//Store the try number in the answer part of the State array, for tracking purposes
+	State[QNum][1][ANum] = State[QNum][2];
+	if (State[QNum][5].length > 0){State[QNum][5] += ' | ';}
+	State[QNum][5] += String.fromCharCode(65+ANum);
+	
+//Should this answer be accepted as correct?
+	if (I[QNum][3][ANum][2] < 1){
+//It's wrong
+
+//Mark the answer
+		Btn.innerHTML = IncorrectIndicator;
+		
+//Remove any previous score unless exercise is finished (6.0.3.8+)
+		if (Finished == false){
+			WriteToInstructions(strInstructions);
+		}	
+		
+//Check whether this leaves just one MC answer unselected, in which case the Q is terminated
+		var RemainingAnswer = FinalAnswer(QNum);
+		if (RemainingAnswer > -1){
+//Behave as if the last answer had been selected, but give no credit for it
+//Increment the number of tries
+			State[QNum][2]++;		
+		
+//Calculate the score for this question
+			CalculateMCQuestionScore(QNum);
+			
+//Get the overall score and add it to the feedback
+			CalculateOverallScore();
+//New for 6.2.2.1
+			var QsDone = CheckQuestionsCompleted();
+			if ((ContinuousScoring == true)||(Finished == true)){
+				Feedback += '<br />' + YourScoreIs + ' ' + Score + '%.' + '<br />' + QsDone;
+				WriteToInstructions(YourScoreIs + ' ' + Score + '%.' + '<br />' + QsDone);
 			}
 			else{
-				RI.Card.style.left = TargPoint[0] + 'px';
-				RI.Card.style.top  = TargPoint[1] + 'px'; 
+				WriteToInstructions(QsDone);
 			}
 		}
-	}.bind(this));
-};
-
-DragEx.GetDockPoint = function(LeftOrigPos, RightCard){
-	var TargL, TargT;
-	var LeftItem = this.GetLeftItemByOrigPos(LeftOrigPos);
-	if (LeftItem !== null){
-		var LeftCard = LeftItem.Card;
-		TargL = LeftCard.GetR() + 5;
-		TargT = (LeftCard.GetT() + Math.floor((LeftCard.GetH() - RightCard.GetH()) / 2));
-		return [TargL, TargT];
 	}
 	else{
-		return [0,0];
-	}
-}
+//It's right
+//Mark the answer
+		Btn.innerHTML = CorrectIndicator;
+				
+//Calculate the score for this question
+		CalculateMCQuestionScore(QNum);
+		
+//New for 6.2.2.0
+		var QsDone = CheckQuestionsCompleted();
 
-DragEx.HandleDrop = function(ROrigPos){
-	var RI = this.GetRightItemByOrigPos(ROrigPos);
-	RI.MarkedWrong = false;
-	RI.MatchedWith = -1;
-	RI.Card.Unhighlight();
-	var Overlap = 0;
-	var MatchedWith = -1;
-	var i;
-	this.LeftItems.forEach(function(LI){
-		var OL = RI.Card.GetOverlap(LI.Card);
-//Check whether it overlaps a card, or is in exact docking position with it.
-		var DP = this.GetDockPoint(LI.OrigPos, RI.Card);
-		if ((OL > Overlap)||((RI.Card.GetL() == DP[0])&&(RI.Card.GetT() == DP[1]))){
-			Overlap = OL;
-			MatchedWith = LI.OrigPos;
-		}
-	}.bind(this));
-	if (MatchedWith > -1){
-		RI.MatchedWith = MatchedWith;
-		TargPoint = this.GetDockPoint(MatchedWith, RI.Card);
-		Slide(ROrigPos, TargPoint);
-		this.RightItems.forEach(function(RI2){
-			if ((RI2.OrigPos !== RI.OrigPos)&&(RI2.MatchedWith == MatchedWith)){
-				RI2.MatchedWith = -1;
-				RI2.Card.Unhighlight();
-				this.SendHome(RI2.OrigPos);
-				RI2.MarkedWrong = false;
+//Get the overall score and add it to the feedback
+		if (ContinuousScoring == true){
+			CalculateOverallScore();
+			if ((ContinuousScoring == true)||(Finished == true)){
+				Feedback += '<br />' + YourScoreIs + ' ' + Score + '%.' + '<br />' + QsDone;
+				WriteToInstructions(YourScoreIs + ' ' + Score + '%.' + '<br />' + QsDone);
 			}
-		}.bind(this));
+		}
+		else{
+			WriteToInstructions(QsDone);
+		}
 	}
-	else{
-		this.SendHome(ROrigPos);
-	}
-}
-
-//This function checks answers and calculates the 
-//current score, then returns true for "finished" or
-//false for "not yet finished". The object's Score
-//property can then be read.
-DragEx.CheckAnswers = function(){
-/*
-	Check each right item to see whether a) it had an 
-	original match on the left, and b) it is matched
-	to a left item whose group is one of its groups.
-*/
-	if (!this.hasOwnProperty('Penalties')){
-		this.Penalties = 0;
-	}
-	var ItemsToCount = 0;
-	var CorrectItems = 0;
-	var Done = true; //Assume till proven otherwise.
 	
-//Tot up the scores.
-	this.RightItems.forEach(function(RI){
-//Only use it if there is a match for it.
-		if (this.GetLeftItemByOrigPos(RI.OrigPos) !== null){
-			ItemsToCount++;
-			if (RI.MatchedWith !== -1){
-				var LI = this.GetLeftItemByOrigPos(RI.MatchedWith);
-				if (RI.Groups.indexOf(LI.Group) > -1){
-					CorrectItems++;
-				}
-				else{
-					Done = false;
-					RI.Card.Highlight();
-					RI.MarkedWrong = true;
-					RI.Card.style.left = (RI.Card.GetL() + 10) + 'px';
-				}
-			}
-			else{
-				Done = false;
-			}
-		}
-		else{
-//It's a distractor and shouldn't be matched. Deduct one from score.
-			if (RI.MatchedWith !== -1){
-				Done = false;
-				RI.Card.Highlight();
-				RI.Card.style.left = (RI.Card.GetL() + 10) + 'px';
-				RI.MarkedWrong = true;
-				CorrectItems--;
-			}
-		}
-	}.bind(this));
-	if (!this.hasOwnProperty('Score')){
-		this.Score = 0;
-	}
-	this.Score = Math.round((100*(CorrectItems - this.Penalties))/ItemsToCount);
-	if (Done === false){
-		this.Penalties++;
-	}
-	return Done;
-};
-
-function Slide(ROrigPos, TargPoint){
-	var Card = DragEx.GetRightItemByOrigPos(ROrigPos).Card;
-	if (Math.abs(Card.GetL() - TargPoint[0]) <= 5){
-		Card.style.left = TargPoint[0] + 'px';
-	}
-	else{
-		var LeftShift = Card.GetL() < TargPoint[0]? 5: -5;
-		Card.style.left = Card.GetL() + LeftShift + 'px';
-	}
-	if (Card.GetT() !== TargPoint[1]){
-		if (Math.abs(Card.GetT() - TargPoint[1]) <= 5){
-			Card.style.top = TargPoint[1] + 'px';
-		}
-		else{
-			var TopShift = Card.GetT() < TargPoint[1]? 5: -5;
-			Card.style.top = Card.GetT() + TopShift + 'px';
-		}
-	}
-	if ((Card.GetL() != TargPoint[0])||(Card.GetT() != TargPoint[1])){
-		setTimeout('Slide(' + ROrigPos + ', [' + TargPoint[0] + ',' + TargPoint[1] + '])', 1);
-	}
-}
-
-function TimerStartUp(){
-	setTimeout('DragEx.Setup()', 300);
-}
-
-function CheckAnswers(){
-	if (Locked == true){return;}
+//Show the button again
+	Btn.style.display = 'inline';
 	
-	var Feedback = '';
-
-	var AllDone = DragEx.CheckAnswers();
-	Score = DragEx.Score;
-	if (Score < 0){Score = 0;}
-
-	if (AllDone == true){
-		Feedback = YourScoreIs + ' ' + Score + '%.<br/>' + CorrectResponse;
-	}
-	else {
-		if (TimeOver == true){
-			Feedback = YourScoreIs + ' ' + Score + '%.'
-		}
-		else{
-			Feedback = YourScoreIs + ' ' + Score + '%.' + '<br />' + IncorrectResponse;
-		}
-	}
+//Finally, show the feedback	
 	ShowMessage(Feedback);
 	
-//If the exercise is over, deal with that
-	if ((AllDone == true)||(TimeOver == true)){
+//Check whether all questions are now done
+	CheckFinished();
+}
+
+function CalculateMCQuestionScore(QNum){
+	var Tries = State[QNum][2] + State[QNum][4]; //include tries and hint penalties
+	var PercentCorrect = State[QNum][3];
+	var TotAns = GetTotalMCAnswers(QNum);
+	var HintPenalties = State[QNum][4];
+	
+//Make sure it's not already complete
+
+	if (State[QNum][0] < 0){
+//Allow for Hybrids
+		if (HintPenalties >= 1){
+			State[QNum][0] = 0;
+		}
+		else{
+//This line calculates the score for this question
+			if (TotAns == 1){
+				State[QNum][0] = 1;
+			}
+			else{
+				State[QNum][0] = ((TotAns-((Tries*100)/State[QNum][3]))/(TotAns-1));
+			}
+		}
+//Fix for Safari bug added for version 6.0.3.42 (negative infinity problem)
+		if ((State[QNum][0] < 0)||(State[QNum][0] == Number.NEGATIVE_INFINITY)){
+			State[QNum][0] = 0;
+		}
+	}
+}
+
+function GetTotalMCAnswers(QNum){
+	var Result = 0;
+	for (var ANum=0; ANum<I[QNum][3].length; ANum++){
+		if (I[QNum][3][ANum][4] == 1){ //This is an MC answer
+			Result++;
+		}
+	}
+	return Result;
+}
+
+function FinalAnswer(QNum){
+	var UnchosenAnswers = 0;
+	var FinalAnswer = -1;
+	for (var ANum=0; ANum<I[QNum][3].length; ANum++){
+		if (I[QNum][3][ANum][4] == 1){ //This is an MC answer
+			if (State[QNum][1][ANum] < 1){ //This answer hasn't been chosen yet
+				UnchosenAnswers++;
+				FinalAnswer = ANum;
+			}
+		}
+	}
+	if (UnchosenAnswers == 1){
+		return FinalAnswer;
+	}
+	else{
+		return -1;
+	}
+}
+
+
+
+
+
+function CalculateOverallScore(){
+	var TotalWeighting = 0;
+	var TotalScore = 0;
+	
+	for (var QNum=0; QNum<State.length; QNum++){
+		if (State[QNum] != null){
+			if (State[QNum][0] > -1){
+				TotalWeighting += I[QNum][0];
+				TotalScore += (I[QNum][0] * State[QNum][0]);
+			}
+		}
+	}
+	if (TotalWeighting > 0){
+		Score = Math.floor((TotalScore/TotalWeighting)*100);
+	}
+	else{
+//if TotalWeighting is 0, no questions so far have any value, so 
+//no penalty should be shown.
+		Score = 100; 
+	}
+}
+
+//New for 6.2.2.0
+function CheckQuestionsCompleted(){
+	if (ShowCompletedSoFar == false){return '';}
+	var QsCompleted = 0;
+	for (var QNum=0; QNum<State.length; QNum++){
+		if (State[QNum] != null){
+			if (State[QNum][0] >= 0){
+				QsCompleted++;
+			}
+		}
+	}
+//Fixes for 6.2.2.2
+	if (QsCompleted >= QArray.length){
+		return ExerciseCompleted;
+	}
+	else{
+		return CompletedSoFar + ' ' + QsCompleted + '/' + QArray.length + '.';
+	}
+}
+
+function CheckFinished(){
+	var FB = '';
+	var AllDone = true;
+	for (var QNum=0; QNum<State.length; QNum++){
+		if (State[QNum] != null){
+			if (State[QNum][0] < 0){
+				AllDone = false;
+			}
+		}
+	}
+	if (AllDone == true){
+	
+//Report final score and submit if necessary
+		CalculateOverallScore();
+		FB = YourScoreIs + ' ' + Score + '%.';
+		if (ShowCorrectFirstTime == true){
+			var CFT = 0;
+			for (QNum=0; QNum<State.length; QNum++){
+				if (State[QNum] != null){
+					if (State[QNum][0] >= 1){
+						CFT++;
+					}
+				}
+			}
+			FB += '<br />' + CorrectFirstTime + ' ' + CFT + '/' + QsToShow;
+		}
+		
+//New for 6.2.2.0
+		FB += '<br />' + ExerciseCompleted;
+		
+		WriteToInstructions(FB);
+		
+		Finished == true;
+
+
 
 
 		TimeOver = true;
 		Locked = true;
+		
+
+
 		Finished = true;
-		WriteToInstructions(Feedback);
+		Detail = '<?xml version="1.0"?><hpnetresult><fields>';
+		for (QNum=0; QNum<State.length; QNum++){
+			if (State[QNum] != null){
+				if (State[QNum][5].length > 0){
+					Detail += '<field><fieldname>Question #' + (QNum+1) + '</fieldname><fieldtype>question-tracking</fieldtype><fieldlabel>Q ' + (QNum+1) + '</fieldlabel><fieldlabelid>QuestionTrackingField</fieldlabelid><fielddata>' + State[QNum][5] + '</fielddata></field>';
+				}
+			}
+		}
+		Detail += '</fields></hpnetresult>';
 	}
 
-	
-//The window layout may be affected by the feedback, so 
-//put the cards in place again.
-	DragEx.SetInitialPositions(false);
 }
+
 
 
 
@@ -1526,28 +1549,32 @@ function CheckAnswers(){
 
 </script>
 
-</head> 
 
-<body onload="TimerStartUp()" id="TheBody" > 
+</head>
+
+<body onload="StartUp()" id="TheBody" >
+
 	<button class="volver">
-		<a href="https://ova-informaticaeducativa.vercel.app/estudiante/subtema/22">
+		<a href="https://ova-informaticaeducativa.vercel.app/estudiante/subtema/31">
 			SALIR
 		</a>
 	</button>
 
+
+
 <!-- EndTopNavButtons -->
 
 <div class="Titles">
-	<h2 class="ExerciseTitle">ESTRUCTURA B&#x00C1;SICA DE LOS PROGRAMAS EDUCATIVOS</h2>
+	<h2 class="ExerciseTitle">Conceptualizaci&#x00F3;n de los Objetos Virtuales de Aprendizaje</h2>
 
-	<h3 class="ExerciseSubtitle">Actividad de aprendizaje / retroalimentaci&#x00F3;n.</h3>
+	<h3 class="ExerciseSubtitle">Conceptualizaci&#x00F3;n del software educativo</h3>
 
 
 
 </div>
 
 <div id="InstructionsDiv" class="StdDiv">
-	<div id="Instructions">Relaciona los elementos de la derecha con los de la izquierda. Para relacionarlos debe arrastar los elementos de la derecha al concepto correspondiente de la izquierda.<br /><br />Dar clic en el bot&#x00F3;n "Comprobar" cada vez que quiera saber si sus respuestas fueron las correctas o incorrectas.</div>
+	<div id="Instructions">Selecciona la opcion correcta</div>
 </div>
 
 
@@ -1555,14 +1582,33 @@ function CheckAnswers(){
 
 
 
-<div class="ExerciseContainer JMatchDrag">
+<div class="ExerciseContainer">
 
-<div class="StdDiv" id="CheckButtonDiv">
-<button id="CheckButton1" class="FuncButton" onclick="CheckAnswers()">&#160;Comprobar&#160;</button>
+<div id="QNav" class="QuestionNavigation">
+
+<p style="text-align: right;">
+<button id="ShowMethodButton" class="FuncButton" onclick="ShowHideQuestions(); return false;">Mostrar todas las preguntas</button>
+</p>
+
+<div id="OneByOneReadout">
+<button id="PrevQButton" class="FuncButton" onclick="ChangeQ(-1); return false;">&lt;</button>
+
+<span id="QNumReadout" class="QNum">&#160;</span>
+
+<button id="NextQButton" class="FuncButton" onclick="ChangeQ(1); return false;">&gt;</button>
+<br />
 </div>
 
+</div>
+ 
+<ol class="QuizQuestions" id="Questions">
+<li class="QuizQuestion" id="Q_0" style="display: none;"><div class="QuestionText">&#x00BF;Qu&#x00E9; son los LMS?</div><ol class="MCAnswers"><li id="Q_0_0"><button class="FuncButton" id="Q_0_0_Btn" onclick="CheckMCAnswer(0,0,this)">?</button>&#160;&#160;Programas lineales y no lineales.</li><li id="Q_0_1"><button class="FuncButton" id="Q_0_1_Btn" onclick="CheckMCAnswer(0,1,this)">?</button>&#160;&#160;Herramienta de c&#x00F3;digo abierto que facilita la creaci&#x00F3;n de contenidos educativos.</li><li id="Q_0_2"><button class="FuncButton" id="Q_0_2_Btn" onclick="CheckMCAnswer(0,2,this)">?</button>&#160;&#160;Software consistente de un conjunto de funcionalidades para gestionar contenidos de aprendizaje.</li><li id="Q_0_3"><button class="FuncButton" id="Q_0_3_Btn" onclick="CheckMCAnswer(0,3,this)">?</button>&#160;&#160;Pr&#x00E1;cticas, tutoriales, simulaciones, juegos instruccionales.</li></ol></li>
+<li class="QuizQuestion" id="Q_1" style="display: none;"><div class="QuestionText">Son caracter&#x00ED;sticas de los LMS.</div><ol class="MCAnswers"><li id="Q_1_0"><button class="FuncButton" id="Q_1_0_Btn" onclick="CheckMCAnswer(1,0,this)">?</button>&#160;&#160;Desplegables, mantenibilidad operabilidad.</li><li id="Q_1_1"><button class="FuncButton" id="Q_1_1_Btn" onclick="CheckMCAnswer(1,1,this)">?</button>&#160;&#160;Educar, inspeccionar, fomentar.</li><li id="Q_1_2"><button class="FuncButton" id="Q_1_2_Btn" onclick="CheckMCAnswer(1,2,this)">?</button>&#160;&#160;Interactividad, flexibilidad, escalabilidad.</li><li id="Q_1_3"><button class="FuncButton" id="Q_1_3_Btn" onclick="CheckMCAnswer(1,3,this)">?</button>&#160;&#160;Todas las anteriores.</li></ol></li></ol>
+
+
 
 </div>
+
 </div>
 
 <div class="Feedback" id="FeedbackDiv">
@@ -1572,23 +1618,14 @@ function CheckAnswers(){
 
 <!-- BeginBottomNavButtons -->
 
+
+
 <!-- EndBottomNavButtons -->
 
 <!-- BeginSubmissionForm -->
 
 <!-- EndSubmissionForm -->
 
-<div id="L_0" class="CardStyle">EL ENTORNO DE COMUNICACI&#x00D3;N O INTERFACE</div>
-<div id="L_1" class="CardStyle">LAS BASES DE DATOS</div>
-<div id="L_2" class="CardStyle">EL MOTOR O ALGORITMO</div>
-
-
-<div id="R_0" class="CardStyle">Es el entorno a trav&#x00E9;s del cual los programas establecen el di&#x00E1;logo con sus usuarios, y es la que posibilita la interactividad caracter&#x00ED;stica de estos materiales</div>
-<div id="R_1" class="CardStyle">Contienen la informaci&#x00F3;n espec&#x00ED;fica que cada programa presentar&#x00E1; a los alumnos.</div>
-<div id="R_2" class="CardStyle">Gestiona las secuencias en que se presenta la informaci&#x00F3;n de las bases de datos y las actividades que pueden realizar los alumnos</div>
-
-
-
-
 </body>
+
 </html>
